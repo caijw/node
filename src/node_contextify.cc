@@ -403,6 +403,11 @@ void ContextifyContext::PropertySetterCallback(
   bool read_only =
       static_cast<int>(attributes) &
       static_cast<int>(PropertyAttribute::ReadOnly);
+  printf("read_only: %d, is_declared_on_global_proxy: %d\n",
+    read_only,
+    is_declared_on_global_proxy
+  );
+
 
   bool is_declared_on_sandbox = ctx->sandbox()
       ->GetRealNamedPropertyAttributes(context, property)
@@ -410,9 +415,22 @@ void ContextifyContext::PropertySetterCallback(
   read_only = read_only ||
       (static_cast<int>(attributes) &
       static_cast<int>(PropertyAttribute::ReadOnly));
+  
+  printf("read_only: %d, is_declared_on_sandbox: %d\n",
+    read_only,
+    is_declared_on_sandbox
+  );
 
-  if (read_only)
+  if (is_declared_on_global_proxy || !is_declared_on_sandbox) {
+    /// 只在global 设置了
+    /// get global 的新值访问不到?
     return;
+  }
+
+  // if (read_only){
+  //   return;
+  // }
+
 
   // true for x = 5
   // false for this.x = 5
@@ -440,9 +458,10 @@ void ContextifyContext::PropertySetterCallback(
     // proxy. Setting it would throw because we are in strict mode.
     // Don't attempt to set it by signaling that the call was
     // intercepted. Only change the value on the sandbox.
+    printf("args.GetReturnValue().Set(false)\n");
     args.GetReturnValue().Set(false);
   }
-
+  printf("ctx->sandbox()->Set\n");
   USE(ctx->sandbox()->Set(context, property, value));
   args.GetReturnValue().Set(value);
 }
@@ -517,7 +536,8 @@ void ContextifyContext::PropertyDefinerCallback(
         desc.has_set() ? desc.set() : Undefined(isolate).As<Value>());
 
     define_prop_on_sandbox(&desc_for_sandbox);
-    args.GetReturnValue().Set(sandbox);
+    // args.GetReturnValue().Set(sandbox);
+    printf("desc.has_get() || desc.has_set()\n");
   } else {
     Local<Value> value =
         desc.has_value() ? desc.value() : Undefined(isolate).As<Value>();
@@ -525,11 +545,15 @@ void ContextifyContext::PropertyDefinerCallback(
     if (desc.has_writable()) {
       PropertyDescriptor desc_for_sandbox(value, desc.writable());
       define_prop_on_sandbox(&desc_for_sandbox);
+      // args.GetReturnValue().Set(sandbox);
+      // printf("desc.has_writable()\n");
     } else {
       PropertyDescriptor desc_for_sandbox(value);
       define_prop_on_sandbox(&desc_for_sandbox);
+      // args.GetReturnValue().Set(sandbox);
+      // printf("!desc.has_writable()\n");
     }
-    args.GetReturnValue().Set(sandbox);
+
   }
 }
 
